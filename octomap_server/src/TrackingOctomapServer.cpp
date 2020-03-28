@@ -34,11 +34,14 @@ using namespace octomap;
 
 namespace octomap_server {
 
+std::string flnm = "";
+
 TrackingOctomapServer::TrackingOctomapServer(const std::string& filename) :
 	    OctomapServer()
 {
   //read tree if necessary
   if (filename != "") {
+      flnm = filename;
     if (m_octree->readBinary(filename)) {
       ROS_INFO("Octomap file %s loaded (%zu nodes).", filename.c_str(), m_octree->size());
       m_treeDepth = m_octree->getTreeDepth();
@@ -116,12 +119,12 @@ void TrackingOctomapServer::trackChanges() {
 
     if (occupied) {
       pnt.intensity = 1000;
+      changedCells.push_back(pnt);
     }
     else {
       pnt.intensity = -1000;
     }
-
-    changedCells.push_back(pnt);
+    // changedCells.push_back(pnt);
   }
 
   if (c > min_change_pub)
@@ -134,6 +137,17 @@ void TrackingOctomapServer::trackChanges() {
     ROS_DEBUG("[server] sending %d changed entries", (int)changedCells.size());
 
     m_octree->resetChangeDetection();
+    if (m_octree->readBinary(flnm)) {
+      // ROS_INFO("Octomap file %s loaded (%zu nodes).", filename.c_str(), m_octree->size());
+      m_treeDepth = m_octree->getTreeDepth();
+      m_res = m_octree->getResolution();
+      m_gridmap.info.resolution = m_res;
+
+      publishAll();
+    } else {
+      ROS_ERROR("Could not open requested file %s, exiting.", flnm.c_str());
+      exit(-1);
+    }
     ROS_DEBUG("[server] octomap size after updating: %d", (int)m_octree->calcNumNodes());
   }
 }
@@ -147,7 +161,6 @@ void TrackingOctomapServer::trackCallback(sensor_msgs::PointCloud2Ptr cloud) {
     pcl::PointXYZI& pnt = cells.points[i];
     m_octree->updateNode(m_octree->coordToKey(pnt.x, pnt.y, pnt.z), pnt.intensity, false);
   }
-
   m_octree->updateInnerOccupancy();
   ROS_DEBUG("[client] octomap size after updating: %d", (int)m_octree->calcNumNodes());
 }
